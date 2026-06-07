@@ -15,6 +15,38 @@
     try { console.log(...args); } catch {}
   }
 
+  function ensureReaderContentScript() {
+    if (window.ehModernReaderInjected) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        if (!chrome || !chrome.runtime || typeof chrome.runtime.sendMessage !== 'function') {
+          reject(new Error('Extension runtime is unavailable'));
+          return;
+        }
+
+        chrome.runtime.sendMessage({ action: 'ensureReaderContentScript' }, (response) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            reject(new Error(lastError.message));
+            return;
+          }
+
+          if (!response || response.success !== true) {
+            reject(new Error((response && response.error) || 'Failed to inject reader script'));
+            return;
+          }
+
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   function getPathInfo() {
     const p = window.location.pathname || '';
 
@@ -411,6 +443,7 @@
         }
       };
 
+      await ensureReaderContentScript();
       document.dispatchEvent(new CustomEvent('ehGalleryReaderReady', { detail: data }));
       debugLog('[EH Reader] hitomi reader event dispatched');
     } finally {

@@ -5,6 +5,15 @@ All notable changes to EH Modern Reader will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-06-07
+### Changed
+- Load the large reader core on Gallery / nhentai / Hitomi pages only when the user starts the reader, reducing normal gallery page startup cost.
+- Limit MPV script interception and error filtering to MPV pages.
+- Move routine reader logs behind the debug-mode switch.
+
+### Security
+- Remove `content.js` from web-accessible resources now that it is injected through the extension service worker.
+
 ## [2.5.1] - 2026-03-22
 ### Added
 - **hitomi.la 支持补全**：支持详情页与 reader 页面启动，缩略图直达指定页。

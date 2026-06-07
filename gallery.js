@@ -36,6 +36,38 @@ function debugLog(...args) {
 
   debugLog('[EH Reader] Gallery bootstrap script loaded');
 
+  function ensureReaderContentScript() {
+    if (window.ehModernReaderInjected) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        if (!chrome || !chrome.runtime || typeof chrome.runtime.sendMessage !== 'function') {
+          reject(new Error('Extension runtime is unavailable'));
+          return;
+        }
+
+        chrome.runtime.sendMessage({ action: 'ensureReaderContentScript' }, (response) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            reject(new Error(lastError.message));
+            return;
+          }
+
+          if (!response || response.success !== true) {
+            reject(new Error((response && response.error) || 'Failed to inject reader script'));
+            return;
+          }
+
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   // 从页面脚本中捕获变量
   function extractPageVariables() {
     const data = {
@@ -416,7 +448,9 @@ function debugLog(...args) {
         fetchPageImageUrl: fetchPageImageUrl
       };
       
-      // 6. 通知 content.js 启动（content.js 已经通过 manifest 加载）
+      // 6. 确保主阅读器脚本已加载，再通知 content.js 启动
+      await ensureReaderContentScript();
+
       // 触发自定义事件
       const event = new CustomEvent('ehGalleryReaderReady', { 
         detail: readerPageData 

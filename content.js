@@ -21,7 +21,7 @@
       });
     }
   } catch {}
-  
+
   // 调试日志函数（仅在开启调试模式时输出）
   function debugLog(...args) {
     if (debugModeEnabled) {
@@ -29,104 +29,119 @@
     }
   }
 
-  // 屏蔽原站 MPV 脚本的异常（例如 ehg_mpv.c.js 在我们接管后仍访问已被移除的节点）
-  // 优化：提前到最早时机注册，确保在原站脚本执行前就位
-  try {
-    const swallowErr = (ev) => {
-      try {
-        const src = ev && (ev.filename || (ev.error && ev.error.fileName) || '');
-        const msg = (ev && (ev.message || (ev.reason && ev.reason.message))) || '';
-        const stack = ev && ev.error && ev.error.stack || '';
-        
-        // 匹配 ehg_mpv 相关错误或 offsetTop 错误
-        if ((src && /ehg_mpv/i.test(src)) || 
-            /ehg_mpv/i.test(String(msg)) || 
-            /offsetTop|preload_generic|preload_scroll_images|load_image/.test(msg) ||
-            /ehg_mpv\.c\.js/.test(stack)) {
-          // 阻止控制台报错传播
-          if (ev.preventDefault) ev.preventDefault();
-          if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-          // 静默处理，不输出任何日志
-          return true;
-        }
-      } catch {}
-      return false;
-    };
-    
-    // 使用 capture 阶段捕获，优先级最高
-    window.addEventListener('error', swallowErr, { capture: true, passive: false });
-    window.addEventListener('unhandledrejection', swallowErr, { capture: true, passive: false });
-    
-    // 附加：覆盖 window.onerror 以最大化拦截
-    const oldOnError = window.onerror;
-    window.onerror = function(message, source, lineno, colno, error) {
-      const msgStr = String(message);
-      const srcStr = String(source || '');
-      const stackStr = error && error.stack || '';
-      
-      if (/ehg_mpv|offsetTop|preload_generic|preload_scroll_images/.test(msgStr) || 
-          /ehg_mpv/.test(srcStr) ||
-          /ehg_mpv\.c\.js/.test(stackStr)) {
-        return true; // 吞掉，不显示在控制台
-      }
-      if (typeof oldOnError === 'function') {
-        return oldOnError.apply(this, arguments);
-      }
-    };
-    
-    // 包装 console.error 过滤特定报错输出
-    const origConsoleError = console.error;
-    console.error = function(...args) {
-      try {
-        const joined = args.map(a => {
-          if (typeof a === 'string') return a;
-          if (a && a.message) return a.message;
-          if (a && a.stack) return a.stack;
-          return String(a);
-        }).join(' ');
-        
-        if (/ehg_mpv|offsetTop|preload_generic|preload_scroll_images/.test(joined)) {
-          return; // 静默，不输出到控制台
-        }
-      } catch {}
-      return origConsoleError.apply(console, args);
-    };
-  } catch (e) {
-    console.warn('[EH Modern Reader] 错误拦截器初始化失败:', e);
-  }
-  
-  // 使用 MutationObserver 主动移除后续动态插入的 ehg_mpv 脚本
-  // 优化：只监听 <head> 和 <body> 直接子节点，不需要 subtree: true（减少触发频率）
-  let scriptBlockObserver = null;
-  const startScriptBlocker = () => {
-      if (scriptBlockObserver) return; // 已启动，不重复
-      scriptBlockObserver = new MutationObserver(mutations => {
+  const isMpvPage = /\/mpv\//i.test(window.location.pathname || '');
+
+  if (isMpvPage) {
+    // 屏蔽原站 MPV 脚本的异常（例如 ehg_mpv.c.js 在我们接管后仍访问已被移除的节点）
+    // 优化：提前到最早时机注册，确保在原站脚本执行前就位
+    try {
+      const swallowErr = (ev) => {
         try {
-          for (const m of mutations) {
-            for (const node of m.addedNodes) {
-              if (node.tagName === 'SCRIPT') {
-                const src = node.getAttribute('src') || '';
-                if (/ehg_mpv|mpv/.test(src)) {
-                  node.type = 'javascript/blocked';
-                  node.remove();
-                } else if (!src && /mpvkey|preload_scroll_images|load_image/.test(node.textContent || '')) {
-                  node.remove();
-                }
-              }
-            }
+          const src = ev && (ev.filename || (ev.error && ev.error.fileName) || '');
+          const msg = (ev && (ev.message || (ev.reason && ev.reason.message))) || '';
+          const stack = ev && ev.error && ev.error.stack || '';
+
+          // 匹配 ehg_mpv 相关错误或 offsetTop 错误
+          if ((src && /ehg_mpv/i.test(src)) ||
+              /ehg_mpv/i.test(String(msg)) ||
+              /offsetTop|preload_generic|preload_scroll_images|load_image/.test(msg) ||
+              /ehg_mpv\.c\.js/.test(stack)) {
+            // 阻止控制台报错传播
+            if (ev.preventDefault) ev.preventDefault();
+            if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+            // 静默处理，不输出任何日志
+            return true;
           }
         } catch {}
-      });
-      try {
-        // 只监听 <head> 和 <body> 的直接子节点，不需要递归整个 DOM
-        const head = document.head;
-        const body = document.body;
-        if (head) scriptBlockObserver.observe(head, { childList: true });
-        if (body) scriptBlockObserver.observe(body, { childList: true });
-      } catch {}
+        return false;
+      };
+
+      // 使用 capture 阶段捕获，优先级最高
+      window.addEventListener('error', swallowErr, { capture: true, passive: false });
+      window.addEventListener('unhandledrejection', swallowErr, { capture: true, passive: false });
+
+      // 附加：覆盖 window.onerror 以最大化拦截
+      const oldOnError = window.onerror;
+      window.onerror = function(message, source, lineno, colno, error) {
+        const msgStr = String(message);
+        const srcStr = String(source || '');
+        const stackStr = error && error.stack || '';
+
+        if (/ehg_mpv|offsetTop|preload_generic|preload_scroll_images/.test(msgStr) ||
+            /ehg_mpv/.test(srcStr) ||
+            /ehg_mpv\.c\.js/.test(stackStr)) {
+          return true; // 吞掉，不显示在控制台
+        }
+        if (typeof oldOnError === 'function') {
+          return oldOnError.apply(this, arguments);
+        }
+      };
+
+      // 包装 console.error 过滤特定报错输出
+      const origConsoleError = console.error;
+      console.error = function(...args) {
+        try {
+          const joined = args.map(a => {
+            if (typeof a === 'string') return a;
+            if (a && a.message) return a.message;
+            if (a && a.stack) return a.stack;
+            return String(a);
+          }).join(' ');
+
+          if (/ehg_mpv|offsetTop|preload_generic|preload_scroll_images/.test(joined)) {
+            return; // 静默，不输出到控制台
+          }
+        } catch {}
+        return origConsoleError.apply(console, args);
+      };
+    } catch (e) {
+      console.warn('[EH Modern Reader] 错误拦截器初始化失败:', e);
+    }
+
+    // 使用 MutationObserver 主动移除后续动态插入的 ehg_mpv 脚本
+    // 优化：只监听 <head> 和 <body> 直接子节点，不需要 subtree: true（减少触发频率）
+    let scriptBlockObserver = null;
+    const scriptBlockTargets = new WeakSet();
+    const observeScriptBlockTarget = (target) => {
+      if (!target || !scriptBlockObserver || scriptBlockTargets.has(target)) return;
+      scriptBlockObserver.observe(target, { childList: true });
+      scriptBlockTargets.add(target);
     };
-    // 延迟启动脚本阻止，避免初始化时干扰
-    setTimeout(startScriptBlocker, 100);
+    const startScriptBlocker = () => {
+        if (!scriptBlockObserver) {
+          scriptBlockObserver = new MutationObserver(mutations => {
+            try {
+              for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                  if (node.tagName === 'SCRIPT') {
+                    const src = node.getAttribute('src') || '';
+                    if (/ehg_mpv|mpv/.test(src)) {
+                      node.type = 'javascript/blocked';
+                      node.remove();
+                    } else if (!src && /mpvkey|preload_scroll_images|load_image/.test(node.textContent || '')) {
+                      node.remove();
+                    }
+                  }
+                }
+              }
+            } catch {}
+          });
+        }
+
+        try {
+          // 只监听 <head> 和 <body> 的直接子节点，不需要递归整个 DOM
+          observeScriptBlockTarget(document.head);
+          observeScriptBlockTarget(document.body);
+          if (!document.body && document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+              observeScriptBlockTarget(document.body);
+            }, { once: true });
+          }
+        } catch {}
+      };
+      // 延迟启动脚本阻止，避免初始化时干扰
+      setTimeout(startScriptBlocker, 100);
+  }
 
   // 提取页面数据（MPV 页面脚本变量 + DOM 兜底）
   function extractPageData() {
@@ -171,7 +186,7 @@
         }
       });
       if (pageData.imageSizes.length > 0) {
-        console.log('[EH Modern Reader] 从原始 DOM 提取了', pageData.imageSizes.length, '张图片的尺寸');
+        debugLog('[EH Modern Reader] 从原始 DOM 提取了', pageData.imageSizes.length, '张图片的尺寸');
       }
     } catch (e) {
       console.warn('[EH Modern Reader] 提取图片尺寸失败:', e);
@@ -481,7 +496,7 @@
 
       // 等待 CSS 加载完成后初始化阅读器
       const onCSSLoad = () => {
-        console.log('[EH Modern Reader] CSS 加载完成');
+        debugLog('[EH Modern Reader] CSS 加载完成');
         initializeReader(pageData);
       };
       
@@ -503,11 +518,11 @@
       return;
     }
     window.__EH_READER_INIT = true;
-    console.log('[EH Modern Reader] 初始化阅读器');
-    console.log('[EH Modern Reader] 页面数:', pageData.pagecount);
-    console.log('[EH Modern Reader] 图片列表长度:', pageData.imagelist?.length);
-    console.log('[EH Modern Reader] 第一张图片数据示例:', pageData.imagelist?.[0]);
-    console.log('[EH Modern Reader] GID:', pageData.gid);
+    debugLog('[EH Modern Reader] 初始化阅读器');
+    debugLog('[EH Modern Reader] 页面数:', pageData.pagecount);
+    debugLog('[EH Modern Reader] 图片列表长度:', pageData.imagelist?.length);
+    debugLog('[EH Modern Reader] 第一张图片数据示例:', pageData.imagelist?.[0]);
+    debugLog('[EH Modern Reader] GID:', pageData.gid);
 
     // 验证必要数据
     if (!pageData.imagelist || pageData.imagelist.length === 0) {
@@ -630,7 +645,7 @@
             ratioCache.set(i, clampedRatio);
           }
         });
-        console.log('[EH Modern Reader] 从原始 DOM 获取了', Object.keys(ratios).length, '张图片的宽高比（无抖动）');
+        debugLog('[EH Modern Reader] 从原始 DOM 获取了', Object.keys(ratios).length, '张图片的宽高比（无抖动）');
         
         // 如果 DOM 尺寸覆盖了所有图片，直接保存并返回
         if (Object.keys(ratios).length >= state.pageCount) {
@@ -654,7 +669,7 @@
               ratioCache.set(parseInt(idx), ratio);
             }
           });
-          console.log('[EH Modern Reader] 从本地缓存恢复了', Object.keys(ratios).length, '张图片的宽高比');
+          debugLog('[EH Modern Reader] 从本地缓存恢复了', Object.keys(ratios).length, '张图片的宽高比');
           if (Object.keys(ratios).length >= state.pageCount) {
             return;
           }
@@ -680,7 +695,7 @@
         return;
       }
       
-      console.log('[EH Modern Reader] 需要异步获取', missingIndices.length, '张图片的宽高比');
+      debugLog('[EH Modern Reader] 需要异步获取', missingIndices.length, '张图片的宽高比');
       
       // 分批并发获取（每批最多 3 个，避免触发速率限制）
       const batchSize = 3;
@@ -743,7 +758,7 @@
       // 保存到 localStorage
       try {
         localStorage.setItem(cacheKey, JSON.stringify(ratios));
-        console.log('[EH Modern Reader] 预加载完成，共', Object.keys(ratios).length, '张图片的宽高比');
+        debugLog('[EH Modern Reader] 预加载完成，共', Object.keys(ratios).length, '张图片的宽高比');
       } catch (e) {
         console.warn('[EH Modern Reader] 宽高比缓存保存失败:', e);
       }
@@ -1110,7 +1125,7 @@
           l.href = origin;
           l.crossOrigin = 'anonymous';
           document.head.appendChild(l);
-          console.log('[EH Modern Reader] 预连接图片域名:', origin);
+          debugLog('[EH Modern Reader] 预连接图片域名:', origin);
         }
       } catch {}
     }
@@ -1127,7 +1142,7 @@
       if (payload && Array.isArray(payload.arr)) {
         if (!payload.ts || (Date.now() - payload.ts) < REALURL_TTL) {
           payload.arr.forEach((u, idx) => { if (typeof u === 'string' && u.startsWith('http')) realUrlCache.set(idx, u); });
-          console.log('[EH Modern Reader] 恢复真实图片URL缓存数量:', realUrlCache.size);
+          debugLog('[EH Modern Reader] 恢复真实图片URL缓存数量:', realUrlCache.size);
           for (let i = 0; i < payload.arr.length; i++) { const u = payload.arr[i]; if (typeof u === 'string' && u.startsWith('http')) { preconnectToOrigin(u); break; } }
         }
       }
@@ -1898,7 +1913,7 @@
         
         // 更新图片
         if (elements.currentImage) {
-          console.log('[EH Modern Reader] 更新图片 src:', img.src?.slice(-50), '-> 页:', pageNum);
+          debugLog('[EH Modern Reader] 更新图片 src:', img.src?.slice(-50), '-> 页:', pageNum);
           elements.currentImage.src = img.src;
           elements.currentImage.style.display = 'block';
           elements.currentImage.alt = `第 ${pageNum} 页`;
@@ -2292,7 +2307,7 @@
         threshold: 0.01
       };
       
-      console.log('[EH Lazy Load] 缩略图懒加载已启用, rootMargin:', rootMargin);
+      debugLog('[EH Lazy Load] 缩略图懒加载已启用, rootMargin:', rootMargin);
       
       // 🎯 IntersectionObserver 回调：不使用累积队列，直接处理
       state.thumbnailObserver = new IntersectionObserver((entries) => {
@@ -3601,7 +3616,7 @@
           // 保存到 localStorage
           saveSettings();
           
-          console.log('[EH Modern Reader] 已恢复默认设置');
+          debugLog('[EH Modern Reader] 已恢复默认设置');
         }
       };
     }
@@ -3708,7 +3723,7 @@
           
           // 🎯 保存当前页码（参考 JHenTai 的 initialIndex = currentImageIndex）
           const savedPage = state.currentPage;
-          console.log('[EH Modern Reader] 阅读模式切换:', oldMode, '→', newMode, ', 当前页:', savedPage);
+          debugLog('[EH Modern Reader] 阅读模式切换:', oldMode, '→', newMode, ', 当前页:', savedPage);
           
           state.settings.readMode = newMode;
           
@@ -3761,7 +3776,7 @@
               pageSlider.resetPosition(true);
             }
             // 切换到单页模式时，强制显示当前页（从连续模式带来的 state.currentPage）
-            console.log('[EH Modern Reader] 切换到单页模式，当前页:', state.currentPage);
+            debugLog('[EH Modern Reader] 切换到单页模式，当前页:', state.currentPage);
             // 直接调用 internalShowPage 绕过延时，确保立即加载正确的页面
             internalShowPage(state.currentPage, { force: true });
             // 更新相邻页图片
@@ -6477,7 +6492,7 @@
       } catch {}
       // 返回单页模式后主动显示当前页图片（强制刷新，避免显示旧图）
       // 直接调用 internalShowPage 绕过延时和模式检查
-      console.log('[EH Modern Reader] 退出连续模式，加载当前页:', state.currentPage);
+      debugLog('[EH Modern Reader] 退出连续模式，加载当前页:', state.currentPage);
       internalShowPage(state.currentPage, { force: true });
     }
 
@@ -6683,7 +6698,7 @@
           persistLastPage();
           return r;
         };
-        console.log('[EH Modern Reader] 恢复上次阅读页:', savedPage);
+        debugLog('[EH Modern Reader] 恢复上次阅读页:', savedPage);
         
         // 先将 state.currentPage 设置为保存的页码，这样模式函数可以滚动到正确的位置
         state.currentPage = savedPage;
@@ -6691,14 +6706,14 @@
         // 应用加载的阅读模式
         const loadedMode = state.settings.readMode;
         if (loadedMode && loadedMode !== 'single') {
-          console.log('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
+          debugLog('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
           if (loadedMode === 'continuous-horizontal') {
             enterContinuousHorizontalMode();
           } else if (loadedMode === 'continuous-vertical') {
             enterContinuousVerticalMode();
           } else if (loadedMode === 'single-vertical') {
             // single-vertical 已在 state.settings.readMode 中设置，UI 会自动处理
-            console.log('[EH Modern Reader] 应用单页竖向模式');
+            debugLog('[EH Modern Reader] 应用单页竖向模式');
           }
         }
         
@@ -6708,7 +6723,7 @@
         // 后续 UI 初始化（主题等）
         if (state.settings.darkMode) { document.body.classList.add('eh-dark-mode'); }
         try { (typeof updateThemeIcon === 'function') && updateThemeIcon(); } catch {}
-        console.log('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
+        debugLog('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
       }).catch((e) => {
         console.warn('[EH Modern Reader] 恢复阅读记忆失败', e);
         
@@ -6718,13 +6733,13 @@
         // 应用加载的阅读模式
         const loadedMode = state.settings.readMode;
         if (loadedMode && loadedMode !== 'single') {
-          console.log('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
+          debugLog('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
           if (loadedMode === 'continuous-horizontal') {
             enterContinuousHorizontalMode();
           } else if (loadedMode === 'continuous-vertical') {
             enterContinuousVerticalMode();
           } else if (loadedMode === 'single-vertical') {
-            console.log('[EH Modern Reader] 应用单页竖向模式');
+            debugLog('[EH Modern Reader] 应用单页竖向模式');
           }
         }
         
@@ -6733,7 +6748,7 @@
         internalShowPage(savedPage);
         if (state.settings.darkMode) { document.body.classList.add('eh-dark-mode'); }
         try { (typeof updateThemeIcon === 'function') && updateThemeIcon(); } catch {}
-        console.log('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
+        debugLog('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
       });
       // 提前 return 避免下面重复执行
       return;
@@ -6748,13 +6763,13 @@
     // 应用加载的阅读模式
     const loadedMode = state.settings.readMode;
     if (loadedMode && loadedMode !== 'single') {
-      console.log('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
+      debugLog('[EH Modern Reader] 初始化加载的阅读模式:', loadedMode);
       if (loadedMode === 'continuous-horizontal') {
         enterContinuousHorizontalMode();
       } else if (loadedMode === 'continuous-vertical') {
         enterContinuousVerticalMode();
       } else if (loadedMode === 'single-vertical') {
-        console.log('[EH Modern Reader] 应用单页竖向模式');
+        debugLog('[EH Modern Reader] 应用单页竖向模式');
       }
     }
     
@@ -6762,7 +6777,7 @@
     internalShowPage(savedPage);
     if (state.settings.darkMode) { document.body.classList.add('eh-dark-mode'); }
     try { (typeof updateThemeIcon === 'function') && updateThemeIcon(); } catch {}
-    console.log('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
+    debugLog('[EH Modern Reader] 阅读器初始化完成，从第', savedPage, '页继续阅读');
   }
 
   /**
@@ -6771,17 +6786,17 @@
   function init() {
     // 监听 Gallery 模式的启动事件
     document.addEventListener('ehGalleryReaderReady', (e) => {
-      console.log('[EH Modern Reader] Gallery reader ready event received');
+      debugLog('[EH Modern Reader] Gallery reader ready event received');
       const galleryData = e.detail || window.__ehReaderData;
       if (galleryData && galleryData.imagelist) {
-        console.log('[EH Modern Reader] Starting from Gallery mode with', galleryData.pagecount, 'pages');
+        debugLog('[EH Modern Reader] Starting from Gallery mode with', galleryData.pagecount, 'pages');
         injectModernReader(galleryData);
       }
     });
 
     // 如果不是 MPV 页面，等待 Gallery 事件
     if (!window.location.pathname.includes('/mpv/')) {
-      console.log('[EH Modern Reader] Waiting for Gallery bootstrap...');
+      debugLog('[EH Modern Reader] Waiting for Gallery bootstrap...');
       return;
     }
 
@@ -6849,7 +6864,7 @@
         document.addEventListener('DOMContentLoaded', () => {
           // Gallery 模式：直接启动
           if (window.__ehGalleryBootstrap && window.__ehGalleryBootstrap.enabled) {
-            console.log('[EH Modern Reader] Gallery 模式启动');
+            debugLog('[EH Modern Reader] Gallery 模式启动');
             const galleryData = window.__ehReaderData;
             if (galleryData && galleryData.imagelist) {
               injectModernReader(galleryData);
@@ -6861,14 +6876,14 @@
           try {
             const pageData = extractPageData();
             if (pageData.imagelist && pageData.imagelist.length > 0) {
-              console.log('[EH Modern Reader] 快速路径：DOM 直接提取成功');
+              debugLog('[EH Modern Reader] 快速路径：DOM 直接提取成功');
               injectModernReader(pageData);
             } else {
               // 并行触发 waitForImagelist 和 fallbackFetchImagelist，而不是串行
-              console.log('[EH Modern Reader] 慢速路径：等待数据或回源抓取');
+              debugLog('[EH Modern Reader] 慢速路径：等待数据或回源抓取');
               Promise.race([
                 waitForImagelist().then(() => {
-                  console.log('[EH Modern Reader] MutationObserver 捕获成功');
+                  debugLog('[EH Modern Reader] MutationObserver 捕获成功');
                   const retryData = extractPageData();
                   if (retryData.imagelist && retryData.imagelist.length > 0) {
                     return retryData;
@@ -6877,13 +6892,13 @@
                 }),
                 fallbackFetchImagelist().then((data) => {
                   if (data && data.imagelist && data.imagelist.length > 0) {
-                    console.log('[EH Modern Reader] 回源抓取成功');
+                    debugLog('[EH Modern Reader] 回源抓取成功');
                     return data;
                   }
                   throw new Error('回源抓取失败');
                 })
               ]).then((finalData) => {
-                console.log('[EH Modern Reader] 使用并行获取的数据初始化');
+                debugLog('[EH Modern Reader] 使用并行获取的数据初始化');
                 injectModernReader(finalData);
               }).catch((e) => {
                 console.error('[EH Modern Reader] 并行初始化均失败:', e);
@@ -6898,7 +6913,7 @@
       } else {
         // Gallery 模式：直接启动
         if (window.__ehGalleryBootstrap && window.__ehGalleryBootstrap.enabled) {
-          console.log('[EH Modern Reader] Gallery 模式启动 (readyState=complete)');
+          debugLog('[EH Modern Reader] Gallery 模式启动 (readyState=complete)');
           const galleryData = window.__ehReaderData;
           if (galleryData && galleryData.imagelist) {
             injectModernReader(galleryData);
@@ -6909,14 +6924,14 @@
         // MPV 模式：原有逻辑（优化为并行提取）
         const pageData = extractPageData();
         if (pageData.imagelist && pageData.imagelist.length > 0) {
-          console.log('[EH Modern Reader] 快速路径：DOM 直接提取成功');
+          debugLog('[EH Modern Reader] 快速路径：DOM 直接提取成功');
           injectModernReader(pageData);
         } else {
           // 并行触发，加快初始化速度
-          console.log('[EH Modern Reader] 慢速路径：等待数据或回源抓取');
+          debugLog('[EH Modern Reader] 慢速路径：等待数据或回源抓取');
           Promise.race([
             waitForImagelist().then(() => {
-              console.log('[EH Modern Reader] MutationObserver 捕获成功');
+              debugLog('[EH Modern Reader] MutationObserver 捕获成功');
               const retryData = extractPageData();
               if (retryData.imagelist && retryData.imagelist.length > 0) {
                 return retryData;
@@ -6925,13 +6940,13 @@
             }),
             fallbackFetchImagelist().then((data) => {
               if (data && data.imagelist && data.imagelist.length > 0) {
-                console.log('[EH Modern Reader] 回源抓取成功');
+                debugLog('[EH Modern Reader] 回源抓取成功');
                 return data;
               }
               throw new Error('回源抓取失败');
             })
           ]).then((finalData) => {
-            console.log('[EH Modern Reader] 使用并行获取的数据初始化');
+            debugLog('[EH Modern Reader] 使用并行获取的数据初始化');
             injectModernReader(finalData);
           }).catch((e) => {
             console.error('[EH Modern Reader] 并行初始化均失败:', e);

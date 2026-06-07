@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "EH Modern Reader",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "Modern E-Hentai Reader with MPV/Gallery modes, smart throttling, progress indicator",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "https://e-hentai.org/*",
@@ -57,7 +58,7 @@
         "https://e-hentai.org/g/*/*",
         "https://exhentai.org/g/*/*"
       ],
-      "js": ["gallery.js", "content.js"],
+      "js": ["gallery.js"],
       "run_at": "document_end"
     },
     {
@@ -65,7 +66,7 @@
         "https://nhentai.net/g/*",
         "https://nhentai.xxx/g/*"
       ],
-      "js": ["content.js", "nhentai.js"],
+      "js": ["nhentai.js"],
       "run_at": "document_end"
     },
     {
@@ -73,13 +74,13 @@
         "https://hitomi.la/*-*.html*",
         "https://hitomi.la/reader/*.html*"
       ],
-      "js": ["content.js", "hitomi.js"],
+      "js": ["hitomi.js"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["style/reader.css", "content.js"],
+      "resources": ["style/reader.css"],
       "matches": ["https://e-hentai.org/*", "https://exhentai.org/*", "https://nhentai.net/*", "https://nhentai.xxx/*", "https://hitomi.la/*"]
     }
   ]

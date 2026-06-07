@@ -1,5 +1,14 @@
 # Release Notes
 
+## v2.5.2 (2026-06-07)
+### Changed
+- Gallery / nhentai / Hitomi pages now load lightweight bootstrap scripts first and inject the main reader core only when the reader is launched.
+- MPV-only script blocking now runs only on MPV pages.
+- Routine reader logs are hidden unless debug mode is enabled.
+
+### Security
+- Removed `content.js` from web-accessible resources.
+
 ## v2.5.1 (2026-03-22)
 ### Added
 - 新增 **hitomi.la** 站点完整支持：
