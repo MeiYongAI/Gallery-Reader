@@ -1,10 +1,10 @@
 # Gallery Reader
 
-![Version](https://img.shields.io/badge/version-2.5.9-blue)
+![Version](https://img.shields.io/badge/version-2.5.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20(Chromium)-brightgreen)
 
-Gallery Reader is a Chrome / Edge extension that provides a multi-site reading experience for E-Hentai, ExHentai, nhentai, and hitomi.la.
+Gallery Reader is a Chrome / Edge extension that provides a multi-site reading experience for E-Hentai, ExHentai, nhentai, hitomi.la, and Wnacg.
 
 ## 中文
 
@@ -12,7 +12,7 @@ Gallery Reader is a Chrome / Edge extension that provides a multi-site reading e
 
 - 支持 E-Hentai / ExHentai MPV 页面自动接管。
 - 支持 E-Hentai / ExHentai Gallery 页面按钮启动和缩略图直达。
-- 支持 nhentai.net、nhentai.xxx 和 hitomi.la。
+- 支持 nhentai.net、nhentai.xxx、hitomi.la 和紳士漫畫 / Wnacg。
 - 支持横向单页、纵向单页、横向连续、纵向连续阅读模式。
 - 支持真实图片加载进度、阅读进度记忆、智能预加载、缩略图懒加载和自动翻页。
 - 根据浏览器或系统语言自动切换中文 / 英文界面。
@@ -35,12 +35,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 ### 最新更新
 
-#### v2.5.9 - 2026-06-08
+#### v2.5.10 - 2026-06-08
 
-- 修复 hitomi.la 缩略图在阅读器中批量 404 的问题，为图片 CDN 请求补充 hitomi.la Referer。
-- 缩略图改为复刻原站画廊页的 `<picture>` / AVIF / WebP 小图加载方式，并按设备像素比只请求必要小图。
-- 优化 hitomi.la 缩略图加载队列，避免未加载成功就标记完成，并减少失败重试和无效请求。
-- 缩短 hitomi.la 主图节流间隔，并只预取相邻页，改善连续阅读时的等待感。
+- 新增紳士漫畫 / Wnacg 支持，覆盖 `wnacg.com`、`wnacg.ru`、`wn07` 和 `wn06` 镜像域名。
+- 接管原站“下拉閱讀”、阅读页和单页图片页入口，启动后直接进入 Gallery Reader。
+- 使用 Wnacg 的 `photos-item-aid-*` 图片列表和画廊分页缩略图，过滤站点装饰图并统一改用 HTTPS 图片地址。
+- 为 Wnacg 缩略图增加直链加载路径，避免用大图生成缩略图导致加载慢。
 
 ## English
 
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 - Automatically takes over E-Hentai / ExHentai MPV pages.
 - Adds launch buttons and thumbnail deep-link handling on E-Hentai / ExHentai gallery pages.
-- Supports nhentai.net, nhentai.xxx, and hitomi.la.
+- Supports nhentai.net, nhentai.xxx, hitomi.la, and Wnacg.
 - Supports single horizontal, single vertical, continuous horizontal, and continuous vertical reading modes.
 - Includes real image loading progress, reading progress memory, smart preloading, lazy thumbnails, and auto paging.
 - Switches UI language automatically between Chinese and English based on browser/system language.
@@ -71,12 +71,12 @@ The release package is generated at `dist/gallery-reader-v{version}.zip`.
 
 ### Latest Update
 
-#### v2.5.9 - 2026-06-08
+#### v2.5.10 - 2026-06-08
 
-- Fixed bulk hitomi.la thumbnail 404s in the reader by attaching the required hitomi.la Referer for image CDN requests.
-- Matched the native hitomi.la gallery thumbnail flow with `<picture>`, AVIF sources, and WebP fallback thumbnails.
-- Improved the hitomi.la thumbnail queue so thumbnails are only marked loaded after a successful image load.
-- Reduced hitomi.la main-image throttling and limited prefetching to nearby pages for snappier reading.
+- Added Wnacg support for `wnacg.com`, `wnacg.ru`, and the `wn07` / `wn06` mirror domains.
+- Takes over the native drop-down reader, slide reader pages, and single image pages.
+- Uses Wnacg `photos-item-aid-*` image lists plus gallery-page thumbnails, filters decorative site images, and normalizes image URLs to HTTPS.
+- Adds direct thumbnail loading for Wnacg so the reader does not generate thumbnails from full-size images.
 
 ## License
 

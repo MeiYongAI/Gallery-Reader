@@ -30,6 +30,7 @@ $includeItems = @(
     "gallery.js",
     "nhentai.js",
     "hitomi.js",
+    "wnacg.js",
     "background.js",
     "popup.html",
     "popup.js",

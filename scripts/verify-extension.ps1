@@ -27,6 +27,7 @@ $requiredFiles = @(
     "gallery.js",
     "nhentai.js",
     "hitomi.js",
+    "wnacg.js",
     "background.js",
     "popup.html",
     "popup.js",
@@ -67,7 +68,7 @@ if (Test-Path $manifestPath) {
         if ($manifest.version -match '^\d+\.\d+\.\d+$') { Pass "version is $($manifest.version)" } else { Fail "version should be semantic x.y.z" }
 
         $hosts = @($manifest.host_permissions)
-        foreach ($hostPermission in @("https://hitomi.la/*", "https://*.hitomi.la/*", "https://gold-usergeneratedcontent.net/*", "https://*.gold-usergeneratedcontent.net/*")) {
+        foreach ($hostPermission in @("https://hitomi.la/*", "https://*.hitomi.la/*", "https://wnacg.com/*", "https://*.wnacg.com/*", "https://wnacg.ru/*", "https://*.wnacg.ru/*", "https://www.wn07.cfd/*", "https://www.wn07.shop/*", "https://www.wn06.cfd/*", "https://www.wn06.shop/*", "https://*.qy0.ru/*", "https://gold-usergeneratedcontent.net/*", "https://*.gold-usergeneratedcontent.net/*")) {
             if ($hosts -contains $hostPermission) { Pass "host permission present: $hostPermission" } else { Fail "missing host permission: $hostPermission" }
         }
 
@@ -77,7 +78,7 @@ if (Test-Path $manifestPath) {
                 if ($script) { $scripts += $script }
             }
         }
-        foreach ($script in @("i18n.js", "content.js", "gallery.js", "nhentai.js", "hitomi.js")) {
+        foreach ($script in @("i18n.js", "content.js", "gallery.js", "nhentai.js", "hitomi.js", "wnacg.js")) {
             if ($scripts -contains $script) { Pass "content script present: $script" } else { Fail "missing content script: $script" }
         }
     } catch {

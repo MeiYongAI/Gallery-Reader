@@ -579,6 +579,7 @@ body.eh-dark-mode #eh-viewer {
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+  user-drag: none;
 }
 
 /* 当前页的图片容器需要相对定位以放置加载覆盖层 */
@@ -642,6 +643,9 @@ body:not(.eh-dark-mode) .eh-thumbnails-container { border-bottom-color: rgba(0,0
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-x;
 }
 
 .eh-thumbnails-horizontal::-webkit-scrollbar {
@@ -688,6 +692,17 @@ body:not(.eh-dark-mode) .eh-thumbnails-horizontal::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   background: rgba(255,255,255,0.04); /* 默认轻微底色，真正缩略图加载后会移除 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.eh-thumbnail,
+.eh-thumbnail *,
+.eh-thumbnail > img,
+.eh-thumbnail > picture,
+.eh-thumbnail > canvas {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 /* 缩略图占位内部容器：保持尺寸稳定，快速背景预览挂载在父 .eh-thumbnail 上 */
@@ -725,6 +740,14 @@ body:not(.eh-dark-mode) .eh-thumb-placeholder { color: rgba(0,0,0,0.25); }
   width: 100px;
   height: 142px;
   object-fit: contain;
+  display: block;
+  animation: ehThumbnailFadeIn 0.3s ease-out;
+}
+
+.eh-direct-thumbnail-img {
+  width: 100px;
+  height: 142px;
+  object-fit: cover;
   display: block;
   animation: ehThumbnailFadeIn 0.3s ease-out;
 }
@@ -1958,6 +1981,51 @@ body.eh-dark-mode .eh-toggle-switch input[type="checkbox"]:checked + .eh-toggle-
     width: min(420px, 100vw);
     max-width: 100vw;
   }
+
+  .eh-thumbnails-container {
+    height: 132px;
+    padding: 4px 0;
+  }
+
+  .eh-thumbnails-horizontal {
+    gap: 6px;
+    padding: 5px 10px;
+  }
+
+  .eh-thumbnail {
+    width: 82px;
+    min-width: 82px;
+    max-width: 82px;
+    height: 116px;
+    border-radius: 7px;
+  }
+
+  .eh-thumbnail > img,
+  .eh-thumbnail > picture,
+  .eh-hitomi-thumbnail-picture,
+  .eh-hitomi-thumbnail-picture > img,
+  .eh-direct-thumbnail-img,
+  .eh-thumbnail > canvas {
+    width: 82px !important;
+    height: 116px !important;
+  }
+
+  .eh-thumbnail-number {
+    bottom: 3px;
+    right: 3px;
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+
+  .eh-slider-container {
+    padding: 10px 14px 9px;
+    gap: 8px;
+  }
+
+  .eh-progress-number {
+    min-width: 34px;
+    font-size: 12px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2041,6 +2109,67 @@ body.eh-dark-mode .eh-toggle-switch input[type="checkbox"]:checked + .eh-toggle-
   .eh-slider-value {
     min-width: 50px;
     font-size: 12px;
+  }
+
+  #eh-bottom-menu {
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.22);
+  }
+
+  .eh-thumbnails-container {
+    height: 104px;
+    padding: 3px 0;
+  }
+
+  .eh-thumbnails-horizontal {
+    gap: 5px;
+    padding: 4px 8px;
+  }
+
+  .eh-thumbnail {
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
+    height: 90px;
+    border-radius: 6px;
+    border-width: 1px;
+  }
+
+  .eh-thumbnail > img,
+  .eh-thumbnail > picture,
+  .eh-hitomi-thumbnail-picture,
+  .eh-hitomi-thumbnail-picture > img,
+  .eh-direct-thumbnail-img,
+  .eh-thumbnail > canvas {
+    width: 64px !important;
+    height: 90px !important;
+  }
+
+  .eh-thumbnail:hover {
+    transform: none;
+  }
+
+  .eh-thumbnail.active {
+    border-width: 2px;
+    box-shadow: 0 0 0 2px rgba(255, 107, 157, 0.22);
+  }
+
+  .eh-thumbnail-number {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .eh-slider-container {
+    padding: 8px 10px 8px;
+    gap: 7px;
+  }
+
+  .eh-progress-number {
+    min-width: 30px;
+    font-size: 11px;
+  }
+
+  .eh-nav-btn {
+    opacity: 0.48;
   }
 }
 

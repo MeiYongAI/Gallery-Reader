@@ -1577,6 +1577,10 @@
       return !!(window.__ehReaderData && window.__ehReaderData.source === 'hitomi');
     }
 
+    function isWnacgReaderSource() {
+      return !!(window.__ehReaderData && window.__ehReaderData.source === 'wnacg');
+    }
+
     const hitomiImageLoadQueue = {
       tail: Promise.resolve(),
       delayMs: 150,
@@ -2833,6 +2837,9 @@
       if (window.__ehReaderData && window.__ehReaderData.source === 'hitomi') {
         return loadHitomiThumbnail(thumb, imageData, pageNum);
       }
+      if (isWnacgReaderSource()) {
+        return loadDirectThumbnail(thumb, imageData, pageNum);
+      }
 
       const idx = pageNum - 1;
       const title = (imageData && imageData.n) ? imageData.n : `Page ${pageNum}`;
@@ -2878,6 +2885,72 @@
       badge.className = 'eh-thumbnail-number';
       badge.textContent = String(pageNum);
       thumb.appendChild(badge);
+    }
+
+    function setDirectThumbFallback(thumb, pageNum) {
+      thumb.style.background = 'none';
+      thumb.replaceChildren();
+      appendThumbnailBadge(thumb, pageNum);
+    }
+
+    function getDirectThumbnailUrls(imageData) {
+      const candidates = [];
+      if (imageData && Array.isArray(imageData.thumbUrls)) {
+        candidates.push(...imageData.thumbUrls);
+      }
+      if (imageData && imageData.thumbUrl) {
+        candidates.push(imageData.thumbUrl);
+      }
+      if (imageData && imageData.t && /^https?:\/\//i.test(imageData.t)) {
+        candidates.push(imageData.t);
+      }
+
+      const urls = [];
+      const seen = new Set();
+      candidates.forEach((url) => {
+        if (typeof url !== 'string' || !url) return;
+        if (seen.has(url)) return;
+        seen.add(url);
+        urls.push(url);
+      });
+      return urls;
+    }
+
+    function loadDirectThumbnail(thumb, imageData, pageNum) {
+      const urls = getDirectThumbnailUrls(imageData);
+      if (urls.length === 0) {
+        setDirectThumbFallback(thumb, pageNum);
+        return Promise.resolve(false);
+      }
+
+      return new Promise((resolve) => {
+        let index = 0;
+      const img = new Image();
+      img.className = 'eh-direct-thumbnail-img';
+      img.draggable = false;
+      img.decoding = 'async';
+      img.loading = 'eager';
+        img.alt = `Page ${pageNum}`;
+
+        const loadNext = () => {
+          if (index >= urls.length) {
+            setDirectThumbFallback(thumb, pageNum);
+            resolve(false);
+            return;
+          }
+          img.src = urls[index++];
+        };
+
+        img.onload = () => {
+          thumb.style.background = 'none';
+          thumb.replaceChildren();
+          thumb.appendChild(img);
+          appendThumbnailBadge(thumb, pageNum);
+          resolve(true);
+        };
+        img.onerror = loadNext;
+        loadNext();
+      });
     }
 
     function getHitomiThumbnailDisplaySize(imageData) {
@@ -2951,6 +3024,7 @@
 
       const img = document.createElement('img');
       img.className = 'eh-hitomi-thumbnail-img';
+      img.draggable = false;
       img.decoding = 'async';
       img.loading = 'eager';
       img.referrerPolicy = 'origin';
@@ -3026,6 +3100,7 @@
         let index = 0;
         const img = new Image();
         img.className = 'eh-hitomi-thumbnail-img';
+        img.draggable = false;
         img.decoding = 'async';
         img.loading = 'eager';
         img.referrerPolicy = 'origin';
@@ -4666,6 +4741,7 @@
 
         onMouseDown(e) {
           if (e.button !== 0) return; // 仅左键
+          e.preventDefault();
           this.isDragging = true;
           this.wasDragged = false;
           this.startX = e.clientX;
@@ -4676,6 +4752,7 @@
 
         onMouseMove(e) {
           if (!this.isDragging) return;
+          e.preventDefault();
           const dx = e.clientX - this.startX;
           
           // 超过阈值才算拖拽
@@ -4698,6 +4775,9 @@
       elements.thumbnails.addEventListener('mousedown', (e) => thumbnailDrag.onMouseDown(e));
       document.addEventListener('mousemove', (e) => thumbnailDrag.onMouseMove(e));
       document.addEventListener('mouseup', (e) => thumbnailDrag.onMouseUp(e));
+      elements.thumbnails.addEventListener('dragstart', (e) => {
+        e.preventDefault();
+      }, true);
       
       // 拦截点击事件：如果是拖拽则阻止
       elements.thumbnails.addEventListener('click', (e) => {

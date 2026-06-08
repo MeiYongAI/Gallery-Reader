@@ -29,6 +29,8 @@
         setSiteStatus('nhentai Gallery', 'warn');
       } else if (/hitomi\.la/i.test(url)) {
         setSiteStatus('hitomi.la', 'warn');
+      } else if (/(^https?:\/\/(?:[^/]*\.)?(?:wnacg\.com|wnacg\.ru)|^https?:\/\/www\.wn0[67]\.(?:cfd|shop))/i.test(url)) {
+        setSiteStatus('Wnacg', 'warn');
       } else {
         setSiteStatus(t('unsupportedSite'), 'bad');
       }
