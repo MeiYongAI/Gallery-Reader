@@ -332,22 +332,38 @@
     return `https://${sub}.${HITOMI_MEDIA_DOMAIN}/${dir}/${path}.${ext}`;
   }
 
+  function thumbnailSubdomainFromHash(hash, ggMeta) {
+    const ggM = ggValueFromHash(hash, ggMeta);
+    return `${String.fromCharCode(97 + ggM)}tn`;
+  }
+
+  function makeThumbnailSets(file, ggMeta) {
+    if (!file || !file.hash) return [];
+    const preferredSub = thumbnailSubdomainFromHash(file.hash, ggMeta);
+    const subs = [preferredSub, preferredSub === 'atn' ? 'btn' : 'atn'];
+    const seen = new Set();
+
+    return subs.filter((sub) => {
+      if (!sub || seen.has(sub)) return false;
+      seen.add(sub);
+      return true;
+    }).map((sub) => ({
+      sub,
+      avif1x: file.hasavif ? buildThumbnailUrlBySubdomain(file, sub, 'avifsmallsmalltn', 'avif') : '',
+      avif2x: file.hasavif ? buildThumbnailUrlBySubdomain(file, sub, 'avifsmalltn', 'avif') : '',
+      webp1x: buildThumbnailUrlBySubdomain(file, sub, 'webpsmallsmalltn', 'webp'),
+      webp2x: buildThumbnailUrlBySubdomain(file, sub, 'webpsmalltn', 'webp')
+    }));
+  }
+
   function makeThumbnailCandidates(file, ggMeta) {
     const out = [];
-    const addThumbs = (sub, dir, ext) => {
-      out.push(buildThumbnailUrlBySubdomain(file, sub, dir, ext));
-    };
-
-    if (file && file.hasavif) {
-      addThumbs('atn', 'avifsmalltn', 'avif');
-      addThumbs('btn', 'avifsmalltn', 'avif');
-      addThumbs('atn', 'avifsmallsmalltn', 'avif');
-      addThumbs('btn', 'avifsmallsmalltn', 'avif');
-    }
-    addThumbs('atn', 'webpsmalltn', 'webp');
-    addThumbs('btn', 'webpsmalltn', 'webp');
-    addThumbs('atn', 'webpsmallsmalltn', 'webp');
-    addThumbs('btn', 'webpsmallsmalltn', 'webp');
+    makeThumbnailSets(file, ggMeta).forEach((set) => {
+      if (set.avif1x) out.push(set.avif1x);
+      if (set.avif2x) out.push(set.avif2x);
+      out.push(set.webp1x);
+      out.push(set.webp2x);
+    });
 
     const uniq = [];
     const seen = new Set();
@@ -462,11 +478,13 @@
     return files.map((f) => {
       const candidates = makeImageCandidates(f, ggMeta);
       const thumbnails = makeThumbnailCandidates(f, ggMeta);
+      const thumbnailSets = makeThumbnailSets(f, ggMeta);
       return {
         primary: candidates[0] || '',
         candidates,
         thumbnail: thumbnails[0] || '',
-        thumbnails
+        thumbnails,
+        thumbnailSets
       };
     });
   }
@@ -520,12 +538,17 @@
       const plan = detail.imagePlan && detail.imagePlan[idx] ? detail.imagePlan[idx] : null;
       const url = normalizeUrl(plan && plan.primary ? plan.primary : '');
       const altUrls = (plan && Array.isArray(plan.candidates)) ? plan.candidates.filter((u) => u && u !== url) : [];
+      const width = f && Number.isFinite(f.width) ? f.width : 0;
+      const height = f && Number.isFinite(f.height) ? f.height : 0;
       return {
         n: String(idx + 1),
         url,
         altUrls,
         thumbUrl: normalizeUrl(plan && plan.thumbnail ? plan.thumbnail : ''),
-        thumbUrls: (plan && Array.isArray(plan.thumbnails)) ? plan.thumbnails : []
+        thumbUrls: (plan && Array.isArray(plan.thumbnails)) ? plan.thumbnails : [],
+        thumbSets: (plan && Array.isArray(plan.thumbnailSets)) ? plan.thumbnailSets : [],
+        width,
+        height
       };
     });
 

@@ -2,7 +2,50 @@
  * Background service worker.
  */
 
+const HITOMI_REFERER_RULE_ID = 1001;
+
+function installHitomiRefererRule() {
+  if (!chrome.declarativeNetRequest || typeof chrome.declarativeNetRequest.updateDynamicRules !== 'function') {
+    return;
+  }
+
+  const rule = {
+    id: HITOMI_REFERER_RULE_ID,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [
+        {
+          header: 'referer',
+          operation: 'set',
+          value: 'https://hitomi.la/'
+        }
+      ]
+    },
+    condition: {
+      urlFilter: '||gold-usergeneratedcontent.net/',
+      initiatorDomains: ['hitomi.la'],
+      resourceTypes: ['image']
+    }
+  };
+
+  try {
+    chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [HITOMI_REFERER_RULE_ID],
+      addRules: [rule]
+    }, () => {
+      const lastError = chrome.runtime && chrome.runtime.lastError;
+      if (lastError) {
+        console.warn('[Gallery Reader] failed to install Hitomi referer rule:', lastError.message);
+      }
+    });
+  } catch (error) {
+    console.warn('[Gallery Reader] failed to install Hitomi referer rule:', error);
+  }
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
+  installHitomiRefererRule();
   if (details.reason === 'install') {
     console.log('[Gallery Reader] installed');
     chrome.tabs.create({ url: 'welcome.html' });
@@ -10,6 +53,12 @@ chrome.runtime.onInstalled.addListener((details) => {
     console.log('[Gallery Reader] updated');
   }
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  installHitomiRefererRule();
+});
+
+installHitomiRefererRule();
 
 async function fetchAllowedText(url) {
   const parsed = new URL(url);

@@ -1460,6 +1460,9 @@
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.dataset.sourceUrl = imageUrl;
+        if (isHitomiReaderSource()) {
+          img.referrerPolicy = 'origin';
+        }
         const timeout = setTimeout(() => {
           if (!img.complete) {
             reject(new Error(tr('imageLoadTimeout')));
@@ -1576,7 +1579,7 @@
 
     const hitomiImageLoadQueue = {
       tail: Promise.resolve(),
-      delayMs: 700,
+      delayMs: 150,
       run(task) {
         const next = this.tail.catch(() => {}).then(async () => {
           try {
@@ -1599,6 +1602,86 @@
         seen.add(url);
         return /\.(?:avif|webp)(?:[?#].*)?$/i.test(url);
       });
+    }
+
+    const hitomiPrefetch = {
+      queue: [],
+      queued: new Set(),
+      running: false
+    };
+
+    function enqueueHitomiPrefetch(indices) {
+      if (!isHitomiReaderSource() || !Array.isArray(indices) || indices.length === 0) return;
+
+      indices.forEach((idx) => {
+        if (idx < 0 || idx >= state.pageCount) return;
+        const cached = state.imageCache.get(idx);
+        if (cached && (cached.status === 'loaded' || cached.status === 'loading')) return;
+        if (hitomiPrefetch.queued.has(idx)) return;
+        hitomiPrefetch.queued.add(idx);
+        hitomiPrefetch.queue.push(idx);
+      });
+
+      processHitomiPrefetch();
+    }
+
+    function processHitomiPrefetch() {
+      if (hitomiPrefetch.running || hitomiPrefetch.queue.length === 0) return;
+
+      const idx = hitomiPrefetch.queue.shift();
+      hitomiPrefetch.queued.delete(idx);
+
+      const cached = state.imageCache.get(idx);
+      if (cached && (cached.status === 'loaded' || cached.status === 'loading')) {
+        processHitomiPrefetch();
+        return;
+      }
+
+      const entry = window.__ehReaderData && window.__ehReaderData.imagelist
+        ? window.__ehReaderData.imagelist[idx]
+        : null;
+      const pageUrl = getImageUrl(idx);
+      const candidates = hitomiMainImageCandidates(pageUrl, entry);
+      if (candidates.length === 0 && pageUrl) {
+        candidates.push(pageUrl);
+      }
+      if (candidates.length === 0) {
+        processHitomiPrefetch();
+        return;
+      }
+
+      hitomiPrefetch.running = true;
+      const pending = (async () => {
+        let lastError = null;
+        for (const candidate of candidates) {
+          try {
+            const img = await loadImageElement(candidate);
+            if (entry) {
+              entry.url = candidate;
+            }
+            return img;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError || new Error(tr('imageLoadFailed'));
+      })();
+
+      state.imageCache.set(idx, { status: 'loading', promise: pending });
+
+      pending
+        .then((img) => {
+          state.imageCache.set(idx, { status: 'loaded', img });
+        })
+        .catch(() => {
+          if (state.imageCache.get(idx)?.promise === pending) {
+            state.imageCache.delete(idx);
+          }
+        })
+        .finally(() => {
+          hitomiPrefetch.running = false;
+          setTimeout(processHitomiPrefetch, 150);
+        });
     }
 
     async function loadImage(pageIndex, retryCount = 0) {
@@ -2172,6 +2255,12 @@
       // Gallery 模式：更保守的预加载策略（仅1页前后）
       if (window.__ehGalleryBootstrap && window.__ehGalleryBootstrap.enabled) {
         if (window.__ehReaderData && window.__ehReaderData.source === 'hitomi') {
+          const prevIdx = currentPage - 2;
+          const nextIdx = currentPage;
+          const hitomiTargets = [];
+          if (prevIdx >= 0) hitomiTargets.push(prevIdx);
+          if (nextIdx < state.pageCount) hitomiTargets.push(nextIdx);
+          enqueueHitomiPrefetch(hitomiTargets);
           return;
         }
         // 当前页的前后各1页
@@ -2265,7 +2354,6 @@
             setTimeout(() => {
               // 1) 目标页缩略图
               if (currentThumb.dataset.loaded === 'false') {
-                currentThumb.dataset.loaded = 'true';
                 const imageData = state.imagelist[pageNum - 1];
                 thumbnailLoadQueue.add(currentThumb, imageData, pageNum);
               }
@@ -2386,6 +2474,7 @@
     const thumbnailLoadQueue = {
       queue: [],
       loading: new Set(),
+      queued: new Set(),
       maxConcurrent: 3, // 最大并发数
       requestDelay: 250, // 每个请求间隔（毫秒），略微提速但保持安全
       isProgrammaticScroll: false, // 标记是否为程序触发的滚动
@@ -2451,40 +2540,76 @@
       
       add(thumb, imageData, pageNum) {
         if (this.loading.has(pageNum)) return;
+        if (this.queued.has(pageNum)) return;
+        if (isHitomiReaderSource() && thumb && thumb.dataset) {
+          if (thumb.dataset.loaded === 'true' || thumb.dataset.loaded === 'failed' || thumb.dataset.loading === 'true') {
+            return;
+          }
+        }
         
+        this.queued.add(pageNum);
         this.queue.push({ thumb, imageData, pageNum });
         this.process();
       },
       
       async process() {
-        if (this.loading.size >= this.maxConcurrent) return;
+        const hitomiThumb = isHitomiReaderSource();
+        const maxConcurrent = hitomiThumb ? 6 : this.maxConcurrent;
+        if (this.loading.size >= maxConcurrent) return;
         if (this.queue.length === 0) return;
         
         const item = this.queue.shift();
+        if (item) {
+          this.queued.delete(item.pageNum);
+        }
         if (!item || this.loading.has(item.pageNum)) {
           this.process();
           return;
+        }
+
+        if (hitomiThumb && item.thumb && item.thumb.dataset) {
+          if (item.thumb.dataset.loaded === 'true' || item.thumb.dataset.loaded === 'failed') {
+            this.process();
+            return;
+          }
+          item.thumb.dataset.loading = 'true';
         }
         
         this.loading.add(item.pageNum);
         
         try {
-          await loadThumbnail(item.thumb, item.imageData, item.pageNum);
+          const loaded = await loadThumbnail(item.thumb, item.imageData, item.pageNum);
+          if (hitomiThumb && item.thumb && item.thumb.dataset) {
+            if (loaded === false) {
+              markHitomiThumbnailFailed(item.thumb, item.pageNum);
+            } else {
+              item.thumb.dataset.loaded = 'true';
+              item.thumb.dataset.loading = 'false';
+              delete item.thumb.dataset.retryCount;
+            }
+          } else if (item.thumb && item.thumb.dataset) {
+            item.thumb.dataset.loaded = 'true';
+          }
         } catch (err) {
           console.warn('[Gallery Reader] 缩略图加载失败:', item.pageNum, err);
+          if (hitomiThumb && item.thumb) {
+            markHitomiThumbnailFailed(item.thumb, item.pageNum);
+          }
         } finally {
           this.loading.delete(item.pageNum);
           
           // 延迟后处理下一个
+          const delay = hitomiThumb ? 60 : this.requestDelay;
           setTimeout(() => {
             this.process();
-          }, this.requestDelay);
+          }, delay);
         }
       },
       
       clear() {
         this.queue = [];
         this.loading.clear();
+        this.queued.clear();
         if (this.scrollLockTimer) {
           clearTimeout(this.scrollLockTimer);
           this.scrollLockTimer = null;
@@ -2537,7 +2662,6 @@
         debugLog(`[Gallery Reader][Lazy Load] 批量加载 ${currentBatch.length} 个缩略图`);
         
         currentBatch.forEach(({ thumb, pageNum }) => {
-          thumb.dataset.loaded = 'true';
           const imageData = state.imagelist[pageNum - 1];
           
           // 加入队列而非立即加载
@@ -2634,7 +2758,7 @@
 
       thumbs.forEach(thumb => {
         if (loaded >= maxBatch) return;
-        if (thumb.dataset.loaded === 'true') return;
+        if (thumb.dataset.loaded !== 'false') return;
 
         const r = thumb.getBoundingClientRect();
         // 判断是否在扩展后的可见区域内（纵向和横向均需有交集）
@@ -2642,7 +2766,6 @@
         const horizontalIn = r.right >= containerRect.left && r.left <= containerRect.right;
         if (!(verticalIn && horizontalIn)) return;
 
-        thumb.dataset.loaded = 'true';
         const pageNum = parseInt(thumb.dataset.page);
         const imageData = state.imagelist[pageNum - 1];
         thumbnailLoadQueue.add(thumb, imageData, pageNum);
@@ -2720,7 +2843,163 @@
       loadFullThumbnail(thumb, imageData, pageNum, idx, title, containerW, containerH);
     }
 
+    function setHitomiThumbFallback(thumb, pageNum) {
+      thumb.style.background = 'none';
+      thumb.replaceChildren();
+      const badge = document.createElement('div');
+      badge.className = 'eh-thumbnail-number';
+      badge.textContent = String(pageNum);
+      thumb.appendChild(badge);
+    }
+
+    function markHitomiThumbnailFailed(thumb, pageNum) {
+      if (!thumb || !thumb.dataset) return;
+
+      const retryCount = (parseInt(thumb.dataset.retryCount || '0', 10) || 0) + 1;
+      thumb.dataset.retryCount = String(retryCount);
+      thumb.dataset.loading = 'false';
+
+      if (retryCount <= 3) {
+        thumb.dataset.loaded = 'false';
+        setTimeout(() => {
+          if (!thumb.isConnected || thumb.dataset.loaded === 'true') return;
+          const imageData = state.imagelist[pageNum - 1];
+          thumbnailLoadQueue.add(thumb, imageData, pageNum);
+        }, 350 * retryCount);
+        return;
+      }
+
+      thumb.dataset.loaded = 'failed';
+      setHitomiThumbFallback(thumb, pageNum);
+    }
+
+    function appendThumbnailBadge(thumb, pageNum) {
+      const badge = document.createElement('div');
+      badge.className = 'eh-thumbnail-number';
+      badge.textContent = String(pageNum);
+      thumb.appendChild(badge);
+    }
+
+    function getHitomiThumbnailDisplaySize(imageData) {
+      let width = Number(imageData && imageData.width) || 0;
+      let height = Number(imageData && imageData.height) || 0;
+      const maxWidth = 100;
+      const maxHeight = 142;
+
+      if (width <= 0 || height <= 0) {
+        return { width: maxWidth, height: maxHeight };
+      }
+
+      if (height / width >= 3) {
+        height = Math.floor((205 / 150) * width);
+      }
+
+      const ratio = width / height;
+      if (ratio > maxWidth / maxHeight) {
+        return {
+          width: maxWidth,
+          height: Math.max(1, Math.round(maxWidth / ratio))
+        };
+      }
+
+      return {
+        width: Math.max(1, Math.round(maxHeight * ratio)),
+        height: maxHeight
+      };
+    }
+
+    function buildHitomiThumbnailAttempts(sets) {
+      const dpr = Number(window.devicePixelRatio) || 1;
+      const attempts = [];
+
+      sets.forEach((set) => {
+        if (!set) return;
+        const webpSrc = (dpr === 1 ? set.webp1x : set.webp2x) || set.webp2x || set.webp1x || '';
+        if (!webpSrc) return;
+
+        const avifSet = [set.avif1x ? `${set.avif1x} 1x` : '', set.avif2x ? `${set.avif2x} 2x` : '']
+          .filter(Boolean)
+          .join(', ');
+
+        if (avifSet) {
+          attempts.push({ avifSet, webpSrc });
+        }
+        attempts.push({ avifSet: '', webpSrc });
+      });
+
+      const seen = new Set();
+      return attempts.filter((attempt) => {
+        const key = `${attempt.avifSet}|${attempt.webpSrc}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function loadHitomiPictureThumbnail(thumb, imageData, pageNum) {
+      const sets = (imageData && Array.isArray(imageData.thumbSets)) ? imageData.thumbSets : [];
+      if (sets.length === 0) return null;
+
+      thumb.style.background = 'none';
+      thumb.replaceChildren();
+
+      const picture = document.createElement('picture');
+      picture.className = 'eh-hitomi-thumbnail-picture';
+
+      const source = document.createElement('source');
+      source.type = 'image/avif';
+
+      const img = document.createElement('img');
+      img.className = 'eh-hitomi-thumbnail-img';
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.referrerPolicy = 'origin';
+      img.alt = `Page ${pageNum}`;
+
+      const displaySize = getHitomiThumbnailDisplaySize(imageData);
+      img.width = displaySize.width;
+      img.height = displaySize.height;
+      img.style.width = `${displaySize.width}px`;
+      img.style.height = `${displaySize.height}px`;
+
+      picture.appendChild(source);
+      picture.appendChild(img);
+      thumb.appendChild(picture);
+      appendThumbnailBadge(thumb, pageNum);
+
+      return new Promise((resolve) => {
+        const attempts = buildHitomiThumbnailAttempts(sets);
+
+        let index = 0;
+        const applyAttempt = () => {
+          if (index >= attempts.length) {
+            setHitomiThumbFallback(thumb, pageNum);
+            resolve(false);
+            return;
+          }
+
+          const attempt = attempts[index++];
+
+          if (attempt.avifSet) {
+            source.srcset = attempt.avifSet;
+          } else {
+            source.removeAttribute('srcset');
+          }
+
+          img.removeAttribute('srcset');
+          img.src = attempt.webpSrc;
+        };
+
+        img.onload = () => resolve(true);
+        img.onerror = applyAttempt;
+        applyAttempt();
+      });
+    }
+
     function loadHitomiThumbnail(thumb, imageData, pageNum) {
+      const picturePromise = loadHitomiPictureThumbnail(thumb, imageData, pageNum);
+      if (picturePromise) return picturePromise;
+
       const candidates = [];
       if (imageData && Array.isArray(imageData.thumbUrls)) {
         candidates.push(...imageData.thumbUrls);
@@ -2739,24 +3018,28 @@
       });
 
       if (urls.length === 0) {
-        thumb.style.background = 'none';
-        thumb.replaceChildren();
-        thumb.innerHTML = `<div class=\"eh-thumbnail-number\">${pageNum}</div>`;
-        return Promise.resolve();
+        setHitomiThumbFallback(thumb, pageNum);
+        return Promise.resolve(false);
       }
 
       return new Promise((resolve) => {
         let index = 0;
         const img = new Image();
+        img.className = 'eh-hitomi-thumbnail-img';
         img.decoding = 'async';
-        img.loading = 'lazy';
+        img.loading = 'eager';
+        img.referrerPolicy = 'origin';
         img.alt = `Page ${pageNum}`;
 
+        const displaySize = getHitomiThumbnailDisplaySize(imageData);
+        img.width = displaySize.width;
+        img.height = displaySize.height;
+        img.style.width = `${displaySize.width}px`;
+        img.style.height = `${displaySize.height}px`;
+
         const finishWithNumber = () => {
-          thumb.style.background = 'none';
-          thumb.replaceChildren();
-          thumb.innerHTML = `<div class=\"eh-thumbnail-number\">${pageNum}</div>`;
-          resolve();
+          setHitomiThumbFallback(thumb, pageNum);
+          resolve(false);
         };
 
         const loadNext = () => {
@@ -2771,12 +3054,8 @@
           thumb.style.background = 'none';
           thumb.replaceChildren();
           thumb.appendChild(img);
-
-          const badge = document.createElement('div');
-          badge.className = 'eh-thumbnail-number';
-          badge.textContent = String(pageNum);
-          thumb.appendChild(badge);
-          resolve();
+          appendThumbnailBadge(thumb, pageNum);
+          resolve(true);
         };
         img.onerror = loadNext;
         loadNext();
@@ -4627,7 +4906,7 @@
         }
 
         // 观察器懒加载 - 统一使用 loadImage 避免重复请求
-        const imageRootMargin = isHitomiReaderSource() ? '120px' : '1200px';
+        const imageRootMargin = isHitomiReaderSource() ? '420px' : '1200px';
         continuous.observer = new IntersectionObserver((entries) => {
           entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -6058,7 +6337,7 @@
         }
 
         // 懒加载观察器
-        const imageRootMargin = isHitomiReaderSource() ? '120px' : '1200px';
+        const imageRootMargin = isHitomiReaderSource() ? '420px' : '1200px';
         continuous.observer = new IntersectionObserver((entries) => {
           entries.forEach(entry => {
             if (entry.isIntersecting) {

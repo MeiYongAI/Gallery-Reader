@@ -1,6 +1,6 @@
 # Gallery Reader
 
-![Version](https://img.shields.io/badge/version-2.5.8-blue)
+![Version](https://img.shields.io/badge/version-2.5.9-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20(Chromium)-brightgreen)
 
@@ -35,12 +35,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 ### 最新更新
 
-#### v2.5.8 - 2026-06-08
+#### v2.5.9 - 2026-06-08
 
-- 修复 hitomi.la 最新 `gg.js` 路由变化导致的主图 CDN 分流错误。
-- hitomi.la 主图只使用当前官方 AVIF/WebP 候选，移除旧 JPG 大图 fallback，减少连续失败日志。
-- 降低 hitomi.la 连续阅读模式的原图预加载距离，并串行节流主图加载，避免一次性触发大量请求。
-- 缩略图优先使用 hitomi.la 官方小图地址，并在 `atn` / `btn` 小图域名之间自动 fallback。
+- 修复 hitomi.la 缩略图在阅读器中批量 404 的问题，为图片 CDN 请求补充 hitomi.la Referer。
+- 缩略图改为复刻原站画廊页的 `<picture>` / AVIF / WebP 小图加载方式，并按设备像素比只请求必要小图。
+- 优化 hitomi.la 缩略图加载队列，避免未加载成功就标记完成，并减少失败重试和无效请求。
+- 缩短 hitomi.la 主图节流间隔，并只预取相邻页，改善连续阅读时的等待感。
 
 ## English
 
@@ -71,12 +71,12 @@ The release package is generated at `dist/gallery-reader-v{version}.zip`.
 
 ### Latest Update
 
-#### v2.5.8 - 2026-06-08
+#### v2.5.9 - 2026-06-08
 
-- Fixed hitomi.la full-image CDN routing after the latest `gg.js` route change.
-- Limited hitomi.la full-image candidates to the current official AVIF/WebP URLs and removed noisy legacy JPG fallbacks.
-- Reduced eager full-image loading in hitomi.la continuous reading modes and throttled full-image loads in sequence.
-- Kept thumbnails on official hitomi.la small-thumbnail URLs with automatic `atn` / `btn` fallback.
+- Fixed bulk hitomi.la thumbnail 404s in the reader by attaching the required hitomi.la Referer for image CDN requests.
+- Matched the native hitomi.la gallery thumbnail flow with `<picture>`, AVIF sources, and WebP fallback thumbnails.
+- Improved the hitomi.la thumbnail queue so thumbnails are only marked loaded after a successful image load.
+- Reduced hitomi.la main-image throttling and limited prefetching to nearby pages for snappier reading.
 
 ## License
 
