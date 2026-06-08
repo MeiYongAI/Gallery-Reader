@@ -1,6 +1,6 @@
 # Gallery Reader
 
-![Version](https://img.shields.io/badge/version-2.5.5-blue)
+![Version](https://img.shields.io/badge/version-2.5.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20(Chromium)-brightgreen)
 
@@ -35,13 +35,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 
 ### 最新更新
 
-#### v2.5.5 - 2026-06-08
+#### v2.5.6 - 2026-06-08
 
-- 扩展短名改为 Gallery Reader。
-- hitomi.la 改为接管原生 Read Online 和 `/reader/{id}.html` 页面，不再额外添加第二个阅读入口。
-- hitomi.la 的 `gg.js` 与 `galleries/{id}.js` 改由后台脚本代取，使用扩展 host permissions 避免页面 CORS 限制。
-- 修复当前 hitomi.la 图片 CDN 路由，包含 imageset 画廊的 AVIF/WebP/原图候选地址。
-- 图片加载动画继续跟随真实网络进度；无法读取响应流时降级为原生图片加载，不播放假循环动画。
+- 修复 hitomi.la 官方 reader 图片 CDN 子域计算：AVIF/WebP 现在使用 `a1/a2` 与 `w1/w2`，不再错误生成 `aa/ba`。
+- hitomi.la 详情页的 Read Online 会先进入原站 `/reader/{id}.html#page`，再由扩展接管，保留原站 reader 加载语境。
+- hitomi.la 阅读时关闭主动相邻页预取和真实图缩略图加载，避免一次性触发大量 CDN 请求导致连接关闭或超时。
+- 保留原图候选地址作为回退，并继续通过后台脚本获取 `gg.js` 与 `galleries/{id}.js`。
 
 ## English
 
@@ -74,13 +73,12 @@ The release package is generated at `dist/gallery-reader-v{version}.zip`.
 
 ### Latest Update
 
-#### v2.5.5 - 2026-06-08
+#### v2.5.6 - 2026-06-08
 
-- Shortened the extension name to Gallery Reader.
-- hitomi.la now takes over the native Read Online entry and `/reader/{id}.html` pages instead of adding a second reader entry.
-- hitomi.la `gg.js` and `galleries/{id}.js` are fetched through the background service worker with extension host permissions to avoid page CORS limits.
-- Fixed current hitomi.la image CDN routing, including AVIF/WebP/original candidates for imageset galleries.
-- Image loading animation still follows real network progress; when a readable stream is unavailable, it falls back to native image loading without a fake loop.
+- Fixed hitomi.la reader CDN subdomains: AVIF/WebP now use `a1/a2` and `w1/w2` instead of the incorrect `aa/ba`.
+- The hitomi.la detail page Read Online entry now navigates to the native `/reader/{id}.html#page` page before the extension takes over, preserving the native reader context.
+- Disabled proactive adjacent-page prefetching and full-image thumbnail loading for hitomi.la to avoid flooding the CDN with simultaneous requests.
+- Original-image candidates remain as fallbacks, while `gg.js` and `galleries/{id}.js` are still fetched through the background service worker.
 
 ## License
 

@@ -1316,6 +1316,12 @@
       prefetch.queue = prefetch.queue.filter(it => it.pageIndex === targetIndex);
     }
     function startNextPrefetch() {
+      const directHitomi = window.__ehReaderData && window.__ehReaderData.source === 'hitomi';
+      if (directHitomi) {
+        prefetch.queue = [];
+        return;
+      }
+
       while (prefetch.running < prefetch.max && prefetch.queue.length > 0) {
         const item = prefetch.queue.shift();
         const idx = item.pageIndex;
@@ -1352,6 +1358,8 @@
     }
     function enqueuePrefetch(indices, prioritize = false) {
       if (!indices || indices.length === 0) return;
+      const directHitomi = window.__ehReaderData && window.__ehReaderData.source === 'hitomi';
+      if (directHitomi) return;
       
       debugLog('[Gallery Reader][Prefetch] 预取请求:', indices, '优先级:', prioritize);
       
@@ -2095,6 +2103,9 @@
       
       // Gallery 模式：更保守的预加载策略（仅1页前后）
       if (window.__ehGalleryBootstrap && window.__ehGalleryBootstrap.enabled) {
+        if (window.__ehReaderData && window.__ehReaderData.source === 'hitomi') {
+          return;
+        }
         // 当前页的前后各1页
         const prevIdx = currentPage - 2;
         const nextIdx = currentPage;
@@ -2628,6 +2639,13 @@
     }
 
     function loadThumbnail(thumb, imageData, pageNum) {
+      if (window.__ehReaderData && window.__ehReaderData.source === 'hitomi') {
+        thumb.style.background = 'none';
+        thumb.replaceChildren();
+        thumb.innerHTML = `<div class=\"eh-thumbnail-number\">${pageNum}</div>`;
+        return;
+      }
+
       const idx = pageNum - 1;
       const title = (imageData && imageData.n) ? imageData.n : `Page ${pageNum}`;
       const containerW = 100, containerH = 142;

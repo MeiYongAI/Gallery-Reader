@@ -47,9 +47,10 @@ $notesFile = New-TemporaryFile
 Gallery Reader $tag
 
 - Shortened the extension name to Gallery Reader.
-- Replaced hitomi.la native Read Online and reader pages instead of adding a second entry.
-- Moved hitomi.la metadata and gg route fetches through the background service worker.
-- Fixed current hitomi.la image CDN routing and direct image fallbacks.
+- Fixed hitomi.la AVIF/WebP CDN subdomain routing to match the native reader.
+- The hitomi.la detail page now enters the native reader URL before Gallery Reader takes over.
+- Reduced hitomi.la eager image loading to avoid flooding the CDN with simultaneous requests.
+- Kept background metadata and gg route fetching for hitomi.la.
 
 See README.md for the bilingual changelog.
 "@ | Set-Content -Path $notesFile -Encoding UTF8
@@ -57,7 +58,7 @@ See README.md for the bilingual changelog.
 Push-Location $rootDir
 
 $exists = $false
-gh release view $tag | Out-Null
+gh release view $tag 2>$null | Out-Null
 if ($LASTEXITCODE -eq 0) {
   $exists = $true
 }

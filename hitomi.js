@@ -101,6 +101,18 @@
     return null;
   }
 
+  function suppressNativeReaderInit() {
+    const info = getPathInfo();
+    if (!info || !info.isReaderPage) return;
+
+    try {
+      window.init = function() {};
+      if (document.body) {
+        document.body.removeAttribute('onload');
+      }
+    } catch {}
+  }
+
   let dataCache = null;
   let dataPromise = null;
 
@@ -126,6 +138,11 @@
     return url;
   }
 
+  function readerUrlFor(gid, page) {
+    const pageNum = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    return `${window.location.origin}/reader/${gid}.html#${pageNum}`;
+  }
+
   function extFromName(file) {
     const name = (file && file.name) ? String(file.name) : '';
     const m = name.match(/\.([a-z0-9]+)$/i);
@@ -133,7 +150,7 @@
   }
 
   const HITOMI_MEDIA_DOMAIN = 'gold-usergeneratedcontent.net';
-  const DEFAULT_GG_B = '1780902081/';
+  const DEFAULT_GG_B = '1780905601/';
   let ggMetaCache = null;
   let ggMetaPromise = null;
 
@@ -178,14 +195,21 @@
 
   function imageSubdomainFromHash(hash, dir, ggMeta) {
     const rv = hashRouteValue(hash);
-    if (!Number.isFinite(rv)) return (dir === 'webp' || dir === 'avif') ? 'aa' : '1';
+    if (!Number.isFinite(rv)) {
+      if (dir === 'webp') return 'w1';
+      if (dir === 'avif') return 'a1';
+      return '1';
+    }
 
-    // hitomi's gg.m() defaults to 1 and returns 0 for values listed in case blocks.
-    // Original images use 1/2. AVIF/WebP reader sources use aa/ba, matching common.js
-    // url_from_url_from_hash(..., dir, undefined, 'a').
-    const ggM = ggMeta && ggMeta.mSet && ggMeta.mSet.has(rv) ? 0 : 1;
-    if (dir === 'webp' || dir === 'avif') {
-      return `${String.fromCharCode(97 + ggM)}a`;
+    // hitomi's gg.m() defaults to 0 and returns 1 for values listed in case blocks.
+    // Reader AVIF/WebP sources call url_from_url_from_hash(..., dir) without base,
+    // so common.js generates a1/a2 and w1/w2. Original images use 1/2.
+    const ggM = ggMeta && ggMeta.mSet && ggMeta.mSet.has(rv) ? 1 : 0;
+    if (dir === 'webp') {
+      return `w${1 + ggM}`;
+    }
+    if (dir === 'avif') {
+      return `a${1 + ggM}`;
     }
     return `${1 + ggM}`;
   }
@@ -228,9 +252,8 @@
     if (file && file.hasavif) {
       out.push(buildImageUrlByDir(file, ggMeta, 'avif', 'avif'));
     }
-    if (file && file.haswebp) {
-      out.push(buildImageUrlByDir(file, ggMeta, 'webp', 'webp'));
-    }
+    // Hitomi's reader always uses WebP as the <img> fallback under AVIF <source>.
+    out.push(buildImageUrlByDir(file, ggMeta, 'webp', 'webp'));
     out.push(buildImageUrlByDir(file, ggMeta, 'images', ext));
     out.push(fallbackLegacyUrl(file));
 
@@ -474,10 +497,11 @@
       const readBtn = document.getElementById('read-online-button');
       if (readBtn && readBtn.dataset.galleryReaderBound !== 'true') {
         readBtn.dataset.galleryReaderBound = 'true';
+        readBtn.setAttribute('href', readerUrlFor(info.gid, startPage || 1));
         readBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopImmediatePropagation();
-          launchReader(startPage).catch(() => {});
+          window.location.assign(readerUrlFor(info.gid, startPage || 1));
         }, true);
       }
     }
@@ -503,6 +527,10 @@
       e.preventDefault();
       e.stopImmediatePropagation();
       const pageNum = m && m[2] ? parseInt(m[2], 10) : ((path && path.startPage) || 1);
+      if (!path.isReaderPage) {
+        window.location.assign(readerUrlFor(gid, pageNum));
+        return;
+      }
       launchReader(pageNum).catch(() => {});
     }, true);
   }
@@ -517,7 +545,10 @@
 
   function boot() {
     if (!getPathInfo()) return;
-    resolveData().catch(() => {});
+    suppressNativeReaderInit();
+    if (getPathInfo().isReaderPage) {
+      resolveData().catch(() => {});
+    }
     bindNativeEntryPoints();
     interceptClicks();
     autoLaunchOnReaderPage();
